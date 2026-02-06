@@ -1,0 +1,155 @@
+public with sharing class BatchableFieldAccessControl implements Database.Batchable<String>, Database.Stateful {
+	private Id permissionSetId;
+	private Boolean fieldEditAccess = false;
+	private Boolean fieldReadAccess = false;
+
+	// Constructor
+	public BatchableFieldAccessControl(String permSetId, Boolean fieldEdit, Boolean fieldRead) {
+		this.permissionSetId = permSetId;
+		this.fieldEditAccess = fieldEdit;
+		this.fieldReadAccess = fieldRead;
+	}
+
+	public Iterable<String> start(Database.BatchableContext bc) {
+		return retrieveSObjectList();
+	}
+	public void execute(Database.BatchableContext bc, List<String> scope) {
+		List<FieldPermissions> fpsToInsertOrUpdate = new List<FieldPermissions>();
+
+
+		Map<String, FieldPermissions> existingFps = new Map<String, FieldPermissions>();
+		for (FieldPermissions fp : [SELECT Id, Field, PermissionsRead, PermissionsEdit FROM FieldPermissions WHERE ParentId = :this.permissionSetId]) {
+			existingFps.put(fp.Field, fp);
+		}
+
+		for (String sobjectName : scope) {
+			Map<String, Schema.SObjectField> fieldsMap = Schema.getGlobalDescribe().get(sobjectName).getDescribe().fields.getMap();
+
+			for (String fieldName : fieldsMap.keySet()) {
+				Schema.DescribeFieldResult fieldDesc = fieldsMap.get(fieldName).getDescribe();
+
+				String fieldAPIName = sobjectName + '.' + fieldName;
+
+				Boolean isFormula = fieldDesc.isCalculated();
+				Boolean isSystemField = !fieldDesc.isCustom() && !fieldDesc.isCreateable() && !fieldDesc.isUpdateable();
+
+
+				// Set grantEditAccess to false if it's a formula or a system field
+
+				Boolean grantEditAccess = (isFormula || isSystemField) ? false : this.fieldEditAccess;
+				Boolean grantReadAccess = this.fieldReadAccess;
+
+				FieldPermissions fp;
+				if (existingFps.containsKey(fieldAPIName)) {
+					fp = existingFps.get(fieldAPIName);
+
+					if (fp.PermissionsRead != grantReadAccess || fp.PermissionsEdit != grantEditAccess) {
+						fp.PermissionsRead = grantReadAccess;
+						// fp.PermissionsEdit = grantEditAccess;
+						fpsToInsertOrUpdate.add(fp);
+					}
+				} else {
+					fp = new FieldPermissions();
+					fp.ParentId = this.permissionSetId;
+					fp.SobjectType = sobjectName;
+					fp.Field = fieldAPIName;
+					fp.PermissionsRead = grantReadAccess;
+					//fp.PermissionsEdit = grantEditAccess;
+					fpsToInsertOrUpdate.add(fp);
+				}
+			}
+		}
+
+		if (!fpsToInsertOrUpdate.isEmpty()) {
+			try {
+
+				Database.upsert(fpsToInsertOrUpdate, false);
+			} catch (Exception e) {
+				System.debug('Upsert failed: ' + e);
+			}
+		}
+	}
+
+	public void finish(Database.BatchableContext bc) {
+		try {
+			if (fieldEditAccess) {
+				updateFieldPermissionsAsEdit();
+			}
+		} catch (Exception e) {
+			System.debug('Error in updateFieldPermissionsAsEdit: ' + e.getMessage());
+		}
+
+		try {
+			System.enqueueJob(new SendCompletionEmailQueueable(permissionSetId));
+		} catch (Exception e) {
+			System.debug('Error in sendCompletionEmail: ' + e.getMessage());
+		}
+	}
+
+
+	// Helper method to retrieve list of SObjects
+	private Set<String> retrieveSObjectList() {
+		Set<String> sObjectSet = new Set<String>();
+
+		if (Test.isRunningTest()) {
+			sObjectSet.add('Account');
+		} else {
+			for (Schema.SObjectType objType : Schema.getGlobalDescribe().values()) {
+				String name = objType.getDescribe().getName();
+				if (!name.toLowerCase().endsWith('__mdt') && !name.toLowerCase().endsWith('__e')) {
+					sObjectSet.add(name);
+				}
+			}
+		}
+
+		return sObjectSet;
+	}
+
+	private void updateFieldPermissionsAsEdit() {
+		List<FieldPermissions> fplist = [SELECT Id, Field, PermissionsRead, PermissionsEdit FROM FieldPermissions WHERE ParentId = :this.permissionSetId and PermissionsEdit = false];
+
+		if (!fplist.isEmpty()) {
+			List<FieldPermissions> fptoUpsert = new List<FieldPermissions>();
+
+			for (FieldPermissions fp : fplist) {
+				fp.PermissionsEdit = true;
+				fptoUpsert.add(fp);
+			}
+
+			try {
+				Database.upsert(fptoUpsert, false);
+			} catch (DmlException e) {
+				System.debug('Upsert failed: ' + e.getMessage());
+				// Handle the exception as per your requirement
+			}
+		}
+	}
+
+	public class SendCompletionEmailQueueable implements Queueable {
+		private Id permissionSetId;
+
+		public SendCompletionEmailQueueable(Id permSetId) {
+			this.permissionSetId = permSetId;
+		}
+
+		public void execute(QueueableContext context) {
+			PermissionSet thisPermission = [SELECT Name FROM PermissionSet WHERE Id = :permissionSetId];
+
+			String emailStr = UserInfo.getUserEmail();
+			List<String> emailList = emailStr.split(',');
+			if (String.isNotBlank(emailStr)) {
+				OrgWideEmailAddress orgWideEmail = [SELECT Id FROM OrgWideEmailAddress WHERE Address = 'noreply@avixa.org'];
+				String subject = 'Access Manager Execution Completed: Field Level';
+				String body = 'Custom Access Manager Execution Completed for the Permission Set: ' + thisPermission.Name;
+
+				try {
+					AVIXA_EmailNotificationService.sendEmailNotificationWithOrgWideEmailAddressId(emailList, subject, body, orgWideEmail.Id);
+				} catch (Exception e) {
+					System.debug('Field Access Manager Send Confirmation Email Failed: ' + e.getMessage());
+				}
+			} else {
+				System.debug('No email addresses provided for notification.');
+			}
+		}
+	}
+}
