@@ -1,0 +1,134 @@
+public class BatchableObjectAccessControl implements Database.Batchable<String>, Database.Stateful{
+	private Id permissionSetId;
+	private Boolean objectCreateAccess = false;
+	private Boolean objectEditAccess = false;
+	private Boolean objectReadAccess = false;
+	private Boolean fieldEditAccess = false;
+	private Boolean fieldReadAccess= false;
+	private Boolean objectViewAllAccess = false;
+	private Boolean objectModifyAllAccess = false;
+	private Integer successfulInserts = 0;
+
+
+	public BatchableObjectAccessControl(String permSetId,  Boolean objCreate, Boolean objEdit, Boolean objRead, Boolean objViewAllAccess,Boolean objModifyAllAccess, Boolean fieldEdit, Boolean fieldRead) {
+		this.permissionSetId = permSetId;
+		this.objectCreateAccess = objCreate;
+		this.objectEditAccess = objEdit;
+		this.objectReadAccess = objRead;
+		this.fieldEditAccess = fieldEdit;
+		this.fieldReadAccess = fieldRead;
+		this.objectViewAllAccess = objViewAllAccess;
+		this.objectModifyAllAccess = objModifyAllAccess;
+	}
+
+	public Iterable<String> start(Database.BatchableContext bc) {
+		return retrieveSObjectList();
+	}
+
+	public void execute(Database.BatchableContext bc, List<String> scope) {
+		List<ObjectPermissions> opsToInsert = new List<ObjectPermissions>();
+
+		for (String objName : scope) {
+			ObjectPermissions op = new ObjectPermissions();
+			op.ParentId = permissionSetId;
+			op.SobjectType = objName;
+			if (objectModifyAllAccess) {
+				op.PermissionsModifyAllRecords = true;
+				op.PermissionsViewAllRecords = true;
+				op.PermissionsDelete = true;
+				op.PermissionsEdit = true;
+				op.PermissionsCreate = true;
+				op.PermissionsRead = true;
+			} else if (objectViewAllAccess) {
+				op.PermissionsRead = true;
+				op.PermissionsViewAllRecords = true;
+			} else {
+				if (objectReadAccess) {
+					op.PermissionsRead = true;
+				}
+				if (objectCreateAccess) {
+					op.PermissionsRead = true;
+					op.PermissionsCreate = true;
+				}
+				if (objectEditAccess) {
+					op.PermissionsRead = true;
+					op.PermissionsEdit = true;
+				}
+			}
+			opsToInsert.add(op);
+		}
+
+		if (!opsToInsert.isEmpty()) {
+			try {
+				List<Database.SaveResult> insertResults = Database.insert(opsToInsert, false);
+
+				for (Database.SaveResult result : insertResults) {
+					if (result.isSuccess()) {
+						successfulInserts++;
+					}
+				}
+				System.debug('Number of successful inserts: ' + successfulInserts);
+			} catch (Exception e) {
+				System.debug('Insert failed: ' + e);
+			}
+		}
+	}
+
+	public void finish(Database.BatchableContext bc) {
+		PermissionSet thisPermission = [SELECT Name FROM PermissionSet WHERE Id = :permissionSetId];
+
+		String emailStr = UserInfo.getUserEmail();
+		List<String> emailList = emailStr.split(',');
+		if (String.isNotBlank(emailStr)) {
+			OrgWideEmailAddress orgWideEmail = [SELECT Id FROM OrgWideEmailAddress WHERE Address = 'noreply@avixa.org'];
+
+			String subject = 'Access Manager Execution Completed: Object Level';
+			String body = 'Custom Access Manager Execution Completed for the Permission Set: ' + thisPermission.Name ;
+				//'<br>Total Successful Object Access Assignment: ' + successfulInserts;
+
+			try {
+				AVIXA_EmailNotificationService.sendEmailNotificationWithOrgWideEmailAddressId(emailList, subject, body, orgWideEmail.Id);
+			} catch (Exception e) {
+				System.debug('Object Access Manager Send Confirmation Email Failed: ' + e.getMessage());
+			}
+		} else {
+			System.debug('No email addresses provided for notification.');
+		}
+
+		if (fieldEditAccess || fieldReadAccess) {
+			BatchableFieldAccessControl batchJob = new BatchableFieldAccessControl(
+				permissionSetId,
+				fieldEditAccess,
+				fieldReadAccess
+			);
+
+			Database.executeBatch(batchJob, 200);
+		}
+	}
+
+
+	private Set<String> retrieveSObjectList() {
+		PermissionSet ps = [SELECT Id FROM PermissionSet WHERE Id = :permissionSetId];
+
+		Set<String> alreadyAssignedPermissions = new Set<String>();
+		for (ObjectPermissions op : [SELECT SobjectType FROM ObjectPermissions WHERE ParentId = :ps.Id]) {
+			alreadyAssignedPermissions.add(op.SobjectType);
+		}
+
+		// If running in a test context, return only 'Account'
+		if (Test.isRunningTest()) {
+			return new Set<String>{'Account'};
+		}
+
+		Set<String> sObjectSet = new Set<String>();
+		for (Schema.SObjectType objType : Schema.getGlobalDescribe().values()) {
+			String name = objType.getDescribe().getName();
+			if (!name.toLowerCase().endsWith('__mdt') && !name.toLowerCase().endsWith('__e')) {
+				sObjectSet.add(name);
+			}
+		}
+		sObjectSet.removeAll(alreadyAssignedPermissions);
+		return sObjectSet;
+	}
+
+}
