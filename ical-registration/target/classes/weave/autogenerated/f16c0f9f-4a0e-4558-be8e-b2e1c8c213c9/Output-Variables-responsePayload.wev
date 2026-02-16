@@ -1,0 +1,35 @@
+%dw 2.0
+
+type auto_f16c0f9f_4a0e_4558_be8e_b2e1c8c213c9_Output_Variables_responsePayload = {|
+  statuscode: Number, 
+  status: String, 
+  data: {|
+    contact: java_io_Serializable {"typeId": "java.io.Serializable",
+    "typeAlias": "Serializable"} | Null, 
+    showDemographics: java_io_Serializable_7 {"typeId": "java.io.Serializable",
+    "typeAlias": "Serializable"} | Null, 
+    avixaEventAttendance: java_io_Serializable_10 {"typeId": "java.io.Serializable",
+    "typeAlias": "Serializable"} | Null
+  |}, 
+  message: String, 
+  errors: Array<Nothing>
+|} | Array<{|  statuscode: Number,   status: String,   data: {|    RegistrationId?: String,     RegistrationType?: String,     VirtualAddOn?: String,     VIPCode?: String,     ExhibitorVIPCode?: String,     VerifiedStatus?: Boolean,     FirstName?: String,     MiddleInitial?: String,     LastName?: String,     Suffix?: String,     CompanyName?: String,     JobTitle?: String,     EmailAddress?: String,     WorkPhone?: String,     CellPhone?: String,     AddressLine1?: String,     AddressLine2?: String,     AddressLine3?: String,     City?: String,     State?: String,     ZipOrPostalCode?: String,     CountryName?: String,     Demographics?: {|      PrimaryBusiness?: String,       PrimaryBusinessOther?: String,       ServiceMarkets?: String,       ServiceMarketsOther?: String,       Solutions?: String,       TotalEmployees?: String,       CurrentPosition?: String,       CurrentPositionOther?: String,       BirthYear?: String,       Products?: String,       ProductsOther?: String,       PurchasingAuthority?: String,       NewsOrganization?: String,       NewsOrganizationWebsite?: String,       MediaType?: String,       Budget?: String,       Gender?: String,       ShowAttendance?: String,       UTM_Source?: String,       UTM_Medium?: String,       UTM_Campaign?: String,       UTM_Content?: String,       Subscribe_Interests?: Array<String>, 
+      UnSubscribe_Interests?: Array<String>
+    |}
+  |} {"example": "{\\\"RegistrationId\\\":\\\"123456\\\",\\\"RegistrationType\\\":\\\"3EO\\\",\\\"VirtualAddOn\\\":\\\"\\\",\\\"VIPCode\\\":\\\"25BADGE\\\",\\\"ExhibitorVIPCode\\\":\\\"\\\",\\\"VerifiedStatus\\\":false,\\\"FirstName\\\":\\\"Muhammad\\\",\\\"MiddleInitial\\\":\\\"\\\",\\\"LastName\\\":\\\"Rashid\\\",\\\"Suffix\\\":\\\"\\\",\\\"CompanyName\\\":\\\"AVIXA\\\",\\\"JobTitle\\\":\\\"Tech Manager\\\",\\\"EmailAddress\\\":\\\"mrashid@avixa.org\\\",\\\"WorkPhone\\\":\\\"703-273-7200\\\",\\\"CellPhone\\\":\\\"703-273-7200\\\",\\\"AddressLine1\\\":\\\"11242 Waples Mill Road\\\",\\\"AddressLine2\\\":\\\"Suite 200\\\",\\\"AddressLine3\\\":\\\"\\\",\\\"City\\\":\\\"Fairfax\\\",\\\"State\\\":\\\"VA\\\",\\\"ZipOrPostalCode\\\":\\\"22030\\\",\\\"CountryName\\\":\\\"United States\\\",\\\"Demographics\\\":{\\\"PrimaryBusiness\\\":\\\"Venues\\/Events (Theme parks, arenas, sports venues, museums); Education\\\",\\\"PrimaryBusinessOther\\\":\\\"\\\",\\\"ServiceMarkets\\\":\\\"Healthcare\\\",\\\"ServiceMarketsOther\\\":\\\"\\\",\\\"Solutions\\\":\\\"Live Events; Performance\\/Entertainment\\\",\\\"TotalEmployees\\\":\\\"11 to 100\\\",\\\"CurrentPosition\\\":\\\"\\\",\\\"CurrentPositionOther\\\":\\\"\\\",\\\"BirthYear\\\":\\\"\\\",\\\"Products\\\":\\\"Control Systems\\/Panels & Interfaces; Content Creation Software; Displays\\/Monitors; Media Players; Projection Screens (Installed or Portable); Projectors; Touchscreens & Interactive Displays\\/Whiteboards; Media Servers\\\",\\\"ProductsOther\\\":\\\"\\\",\\\"PurchasingAuthority\\\":\\\"Authorize (you are responsible for making the final decision)\\\",\\\"NewsOrganization\\\":\\\"\\\",\\\"NewsOrganizationWebsite\\\":\\\"\\\",\\\"MediaType\\\":\\\"\\\",\\\"Budget\\\":\\\"\$1M to less than \$10M\\\",\\\"Gender\\\":\\\"Female\\\",\\\"ShowAttendance\\\":\\\"2-4 times (at least one other time)\\\",\\\"UTM_Source\\\":\\\"PARDOT\\\",\\\"UTM_Medium\\\":\\\"EMAIL3A\\\",\\\"UTM_Campaign\\\":\\\"BADGE\\\",\\\"UTM_Content\\\":\\\"\\\",\\\"Subscribe_Interests\\\":[\\\"COMM_OPT_IN\\\",\\\"COMM_THIRD_PARTY_CONSENT\\\"],\\\"UnSubscribe_Interests\\\":[\\\"COMM_AVIT_CONVERGENCE\\\",\\\"COMM_CTS_NEWS\\\"]}}"}, 
+  message: Null, 
+  errors: Null | Array<String>
+|}>
+type java_io_Serializable_10 = {|  |} {"typeId": "java.io.Serializable",
+"typeAlias": "Serializable"}
+
+
+type java_io_Serializable = {|  |} {"typeId": "java.io.Serializable",
+"typeAlias": "Serializable"}
+
+
+type java_io_Serializable_7 = {|  |} {"typeId": "java.io.Serializable",
+"typeAlias": "Serializable"}
+
+
+

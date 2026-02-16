@@ -1,0 +1,42 @@
+http:
+  port: "8089"
+ 
+api:
+  id: "20320222"
+  
+showMetadata:
+  avixaEventId: "a3jS6000000UICPIA4"
+  avixaEventName: "ICAL Show 2025"
+  
+#Generic Until Successful
+reconnection:
+   attempts: "3"
+   frequency: "10000" #In Milliseconds
+   
+#Salesforce Connection Details
+sfconnection:
+  timeout: "60"
+
+azure:
+  storageAccount: "avixalogtablesdev"
+  tableName: "RegistrationICAL2025"
+  sasToken: "sv=2024-11-04&ss=t&srt=o&sp=rwdlacu&se=2026-05-15T03:59:59Z&st=2025-05-14T09:59:59Z&spr=https&sig=COHZnx0fDxCd44pFHhJ7gttdQbHxrdUKrZKTJcXNvO8%3D"
+
+salesforcejwt:
+  consumerKey: "3MVG9CXa9eR3sUEDllG7cM0cn02GH3KH2Fa41DGlgtXI47qFw1kfpUfA0HUGpr7hQ74FDkMcsFCcdgR_QChZP"
+  keystore: "certs.uat/00DSu000004N7RV.jks"
+  principal: "mulesoft@avixa.org.prod.staging"
+  tokenUrl: "https://test.salesforce.com/services/oauth2/token"
+  keyStorePassword: "MuS0ftP@55Key#9x"
+  
+email:
+  timeoutUnit: "MINUTES"
+  timeout: "5"
+  host: "smtp.office365.com"
+  port: "587"
+  starttls: "mail.smtp.starttls.enable"
+  starttlsenable: "true"
+  fromAddress: "donotreply@avixa.org"
+  subject: "Mulesoft-UAT: ICAL Registration failure"
+  toAddress: "brijal@avixa.org,mulesoft@avixa.org"
+  password: "2XtzB3as4VTtH7TPmoeESb9c"

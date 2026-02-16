@@ -1,0 +1,9 @@
+%dw 2.0
+
+type auto_f16c0f9f_4a0e_4558_be8e_b2e1c8c213c9_Output_Variables_avixaAttendanceId = java_io_Serializable {"typeId": "java.io.Serializable",
+"typeAlias": "Serializable"} | Null
+type java_io_Serializable = {|  |} {"typeId": "java.io.Serializable",
+"typeAlias": "Serializable"}
+
+
+

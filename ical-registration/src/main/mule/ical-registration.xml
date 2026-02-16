@@ -1,0 +1,742 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mule xmlns:tls="http://www.mulesoft.org/schema/mule/tls" xmlns:email="http://www.mulesoft.org/schema/mule/email" xmlns:scripting="http://www.mulesoft.org/schema/mule/scripting" xmlns:db="http://www.mulesoft.org/schema/mule/db" xmlns:sockets="http://www.mulesoft.org/schema/mule/sockets" xmlns:api-gateway="http://www.mulesoft.org/schema/mule/api-gateway" xmlns:salesforce="http://www.mulesoft.org/schema/mule/salesforce" xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:apikit="http://www.mulesoft.org/schema/mule/mule-apikit" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core" xmlns:http="http://www.mulesoft.org/schema/mule/http" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd http://www.mulesoft.org/schema/mule/mule-apikit http://www.mulesoft.org/schema/mule/mule-apikit/current/mule-apikit.xsd http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd 
+http://www.mulesoft.org/schema/mule/salesforce http://www.mulesoft.org/schema/mule/salesforce/current/mule-salesforce.xsd
+http://www.mulesoft.org/schema/mule/api-gateway http://www.mulesoft.org/schema/mule/api-gateway/current/mule-api-gateway.xsd
+http://www.mulesoft.org/schema/mule/sockets http://www.mulesoft.org/schema/mule/sockets/current/mule-sockets.xsd
+http://www.mulesoft.org/schema/mule/db http://www.mulesoft.org/schema/mule/db/current/mule-db.xsd
+http://www.mulesoft.org/schema/mule/scripting http://www.mulesoft.org/schema/mule/scripting/current/mule-scripting.xsd
+http://www.mulesoft.org/schema/mule/email http://www.mulesoft.org/schema/mule/email/current/mule-email.xsd
+http://www.mulesoft.org/schema/mule/tls http://www.mulesoft.org/schema/mule/tls/current/mule-tls.xsd">
+    <http:listener-config name="ical-registration-httpListenerConfig">
+        <http:listener-connection host="0.0.0.0" port="${http.port}" readTimeout="60000"/>
+    </http:listener-config>
+    <apikit:config name="ical-registration-config" api="resource::ff14607f-58ec-4e26-8909-88afd563792a:ical-registration:1.0.0:raml:zip:ical-registration.raml" outboundHeadersMapName="outboundHeaders" httpStatusVarName="httpStatus" />
+ <api-gateway:autodiscovery apiId="${api.id}" ignoreBasePath="false" doc:name="API Autodiscovery" doc:id="c2c2bf2b-1105-4151-a424-4dfa4ddbe659" flowRef="ical-registration-main"/>
+	<configuration-properties doc:name="Configuration properties" doc:id="ed8ffec6-6b35-4ad5-b6be-6c5e445de2ce" file="properties/${mule.env}.yaml" />
+	<global-property doc:name="Global Property" doc:id="5ee15043-320b-4294-8c6d-fe053a954a63" name="mule.env" value="production" />
+	<salesforce:sfdc-config name="Salesforce_Config_JWT" doc:name="Salesforce Config" doc:id="bdbf6055-d9ba-475a-b465-c04ddae24b0c" >
+		<salesforce:jwt-connection consumerKey="${salesforcejwt.consumerKey}" keyStore="${salesforcejwt.keystore}" storePassword="${salesforcejwt.keyStorePassword}" principal="${salesforcejwt.principal}" tokenEndpoint="${salesforcejwt.tokenUrl}" connectionTimeout="${sfconnection.timeout}" loginRequestTimeout="${sfconnection.timeout}">
+			<reconnection >
+				<reconnect frequency="${reconnection.frequency}" count="${reconnection.attempts}" />
+			</reconnection>
+		</salesforce:jwt-connection>
+	</salesforce:sfdc-config>
+	<email:smtp-config name="Email_SMTP" doc:name="Email SMTP" doc:id="68ab0e9b-6f77-4562-b96b-072d0f1b11d9" >
+		<email:smtp-connection host="${email.host}" port="${email.port}" user="${email.fromAddress}" password="${email.password}" timeoutUnit="#[p('email.timeoutUnit')]" connectionTimeout="#[p('email.timeout')]" readTimeout="#[p('email.timeout')]" writeTimeout="#[p('email.timeout')]">
+			<reconnection >
+				<reconnect frequency="${reconnection.frequency}" count="${reconnection.attempts}" />
+			</reconnection>
+			<email:properties >
+				<email:property key="${email.starttls}" value="${email.starttlsenable}" />
+			</email:properties>
+		</email:smtp-connection>
+	</email:smtp-config>
+	<flow name="ical-registration-main" doc:id="68bf4d3e-cffa-48dd-bd16-bbc028b9be8e">
+        <http:listener config-ref="ical-registration-httpListenerConfig" path="/api/*">
+            <http:response statusCode="#[vars.httpStatus default 200]">
+                <http:headers><![CDATA[#[vars.outboundHeaders default {}]]]></http:headers>
+            </http:response>
+            <http:error-response statusCode="#[vars.httpStatus default 500]">
+                <http:body><![CDATA[#[payload]]]></http:body>
+                <http:headers><![CDATA[#[vars.outboundHeaders default {}]]]></http:headers>
+            </http:error-response>
+        </http:listener>
+        <apikit:router config-ref="ical-registration-config" />
+        <error-handler>
+            <on-error-propagate type="APIKIT:BAD_REQUEST">
+                <ee:transform doc:name="Transform Message">
+                    <ee:message>
+                        <ee:set-payload><![CDATA[%dw 2.0
+output application/json
+---
+{message: "Bad request"}]]></ee:set-payload>
+                    </ee:message>
+                    <ee:variables>
+                        <ee:set-variable variableName="httpStatus">400</ee:set-variable>
+                    </ee:variables>
+                </ee:transform>
+            </on-error-propagate>
+            <on-error-propagate type="APIKIT:NOT_FOUND">
+                <ee:transform doc:name="Transform Message">
+                    <ee:message>
+                        <ee:set-payload><![CDATA[%dw 2.0
+output application/json
+---
+{message: "Resource not found"}]]></ee:set-payload>
+                    </ee:message>
+                    <ee:variables>
+                        <ee:set-variable variableName="httpStatus">404</ee:set-variable>
+                    </ee:variables>
+                </ee:transform>
+            </on-error-propagate>
+            <on-error-propagate type="APIKIT:METHOD_NOT_ALLOWED">
+                <ee:transform doc:name="Transform Message">
+                    <ee:message>
+                        <ee:set-payload><![CDATA[%dw 2.0
+output application/json
+---
+{message: "Method not allowed"}]]></ee:set-payload>
+                    </ee:message>
+                    <ee:variables>
+                        <ee:set-variable variableName="httpStatus">405</ee:set-variable>
+                    </ee:variables>
+                </ee:transform>
+            </on-error-propagate>
+            <on-error-propagate type="APIKIT:NOT_ACCEPTABLE">
+                <ee:transform doc:name="Transform Message">
+                    <ee:message>
+                        <ee:set-payload><![CDATA[%dw 2.0
+output application/json
+---
+{message: "Not acceptable"}]]></ee:set-payload>
+                    </ee:message>
+                    <ee:variables>
+                        <ee:set-variable variableName="httpStatus">406</ee:set-variable>
+                    </ee:variables>
+                </ee:transform>
+            </on-error-propagate>
+            <on-error-propagate type="APIKIT:UNSUPPORTED_MEDIA_TYPE">
+                <ee:transform doc:name="Transform Message">
+                    <ee:message>
+                        <ee:set-payload><![CDATA[%dw 2.0
+output application/json
+---
+{message: "Unsupported media type"}]]></ee:set-payload>
+                    </ee:message>
+                    <ee:variables>
+                        <ee:set-variable variableName="httpStatus">415</ee:set-variable>
+                    </ee:variables>
+                </ee:transform>
+            </on-error-propagate>
+            <on-error-propagate type="APIKIT:NOT_IMPLEMENTED">
+                <ee:transform doc:name="Transform Message">
+                    <ee:message>
+                        <ee:set-payload><![CDATA[%dw 2.0
+output application/json
+---
+{message: "Not Implemented"}]]></ee:set-payload>
+                    </ee:message>
+                    <ee:variables>
+                        <ee:set-variable variableName="httpStatus">501</ee:set-variable>
+                    </ee:variables>
+                </ee:transform>
+            </on-error-propagate>
+        </error-handler>
+    </flow>
+    <flow name="ical-registration-console">
+        <http:listener config-ref="ical-registration-httpListenerConfig" path="/console/*">
+            <http:response statusCode="#[vars.httpStatus default 200]">
+                <http:headers>#[vars.outboundHeaders default {}]</http:headers>
+            </http:response>
+            <http:error-response statusCode="#[vars.httpStatus default 500]">
+                <http:body>#[payload]</http:body>
+                <http:headers>#[vars.outboundHeaders default {}]</http:headers>
+            </http:error-response>
+        </http:listener>
+        <apikit:console config-ref="ical-registration-config" />
+        <error-handler>
+            <on-error-propagate type="APIKIT:NOT_FOUND">
+                <ee:transform doc:name="Transform Message">
+                    <ee:message>
+                        <ee:set-payload><![CDATA[%dw 2.0
+output application/json
+---
+{message: "Resource not found"}]]></ee:set-payload>
+                    </ee:message>
+                    <ee:variables>
+                        <ee:set-variable variableName="httpStatus">404</ee:set-variable>
+                    </ee:variables>
+                </ee:transform>
+            </on-error-propagate>
+        </error-handler>
+    </flow>
+    <flow name="post:\registerICAL:application\json:ical-registration-config">
+        <set-variable value="#[payload]" doc:name="Set Original Payload" doc:id="0c90475a-3b65-4130-8e19-26e0e7a1b1ac" variableName="originalPayload" />
+		<async doc:name="Async" doc:id="d6cea0e1-2b89-44e6-ba08-8ffb0d12b2d9" >
+			<flow-ref doc:name="Flow Reference" doc:id="9782b2b7-b0a8-4d70-82f6-7af5b104ba10" name="ical-registrationSub_Flow_Create_Azure_Table_Logs" />
+		</async>
+		<logger level="INFO" doc:name="Logger" doc:id="221f028c-88ce-44c5-96eb-069a4292ec03" message="#[vars.originalPayload]" />
+		<salesforce:query doc:name="Query contact to Check if Certified" doc:id="bd870e74-2bc7-41ff-8396-d000fc0eff30" config-ref="Salesforce_Config_JWT">
+			<salesforce:salesforce-query ><![CDATA[#[
+  "SELECT Id, Is_CTS_Passed__c, Is_ANP_Passed__c, Lead_Source_Note__c " ++
+  "FROM Contact WHERE Email = '" ++ (vars.originalPayload.EmailAddress default "") ++ "'" ]]]></salesforce:salesforce-query>
+		</salesforce:query>
+		<ee:transform doc:name="Transform Message" doc:id="d2cd95a3-d8da-44d8-9800-0f882e8c9c0b" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/java
+
+var subs = vars.originalPayload.Demographics.Subscribe_Interests default []
+var unsubs = vars.originalPayload.Demographics.UnSubscribe_Interests default []
+var assignName = 
+  isEmpty(payload) or 
+  not ((payload[0].Is_ANP_Passed__c default false) or (payload[0].Is_CTS_Passed__c default false))
+
+fun getValue(key) =
+  if (key == "COMM_OPT_IN") 
+    if (unsubs contains key) true
+    else if (subs contains key) false
+    else null
+  else
+    if (unsubs contains key) false
+    else if (subs contains key) true
+    else null
+
+---
+[{
+    // Conditional name assignment (only if assignName is true)
+  (if (assignName) {
+    LastName: vars.originalPayload.LastName,
+    FirstName: vars.originalPayload.FirstName
+  } else {}),
+
+  MailingStreet: 
+    (vars.originalPayload.AddressLine1 as String default "") ++
+    (if ((vars.originalPayload.AddressLine2 as String default "") != "") ", " ++ (vars.originalPayload.AddressLine2 as String default "") else "") ++
+    (if ((vars.originalPayload.AddressLine3 as String default "") != "") ", " ++ (vars.originalPayload.AddressLine3 as String default "") else ""),
+  MailingCity: vars.originalPayload.City,
+  MailingState: vars.originalPayload.State,
+  MailingPostalCode: vars.originalPayload.ZipOrPostalCode,
+  MailingCountry: vars.originalPayload.CountryName,
+  Phone: vars.originalPayload.WorkPhone,
+  MobilePhone: vars.originalPayload.CellPhone,
+  Email: vars.originalPayload.EmailAddress,
+  Title: vars.originalPayload.JobTitle,
+  Company_Name_Text__c: vars.originalPayload.CompanyName,
+  Middle_Name__c: vars.originalPayload.MiddleInitial,
+  Suffix__c: vars.originalPayload.Suffix,
+  RegistrationId_CurrentICAL__c: vars.originalPayload.RegistrationId,
+  //DemoGraphics
+  Lead_Source_Note__c: if ((payload[0].Lead_Source_Note__c default null) == null) p("showMetadata.avixaEventName") else payload[0].Lead_Source_Note__c,
+  Primary_Business__c: vars.originalPayload.Demographics.PrimaryBusiness,
+  Primary_Business_Other__c: vars.originalPayload.Demographics.PrimaryBusinessOther,
+  Solutions__c: vars.originalPayload.Demographics.Solutions,
+  Current_Position__c: vars.originalPayload.Demographics.CurrentPosition,
+  Current_Position_Other__c: vars.originalPayload.Demographics.CurrentPositionOther,
+  Birth_Year__c: vars.originalPayload.Demographics.BirthYear,
+  Products__c: vars.originalPayload.Demographics.Products,
+  Products_Other__c: vars.originalPayload.Demographics.ProductsOther,
+  Purchase_Authority__c: vars.originalPayload.Demographics.PurchasingAuthority,
+  News_Organization__c: vars.originalPayload.Demographics.NewsOrganization,
+  News_Organization_Website__c: vars.originalPayload.Demographics.NewsOrganizationWebsite,
+  Media_Type__c: vars.originalPayload.Demographics.MediaType,
+  Gender__c: vars.originalPayload.Demographics.Gender,
+  Show_Attendance__c: vars.originalPayload.Demographics.ShowAttendance,
+  Last_Demographic_Date__c: now() as DateTime {timezone: "America/New_York"},
+  
+  HasOptedOutOfEmail: getValue("COMM_OPT_IN"),
+  Third_Party_Consent__c: getValue("COMM_THIRD_PARTY_CONSENT"),
+  Conferencing_Collaboration_Newsletter__c: getValue("COMM_CONFERENCING_COLLABORATION"),
+  CTS_News__c: getValue("COMM_CTS_NEWS"),
+  D_Sign__c: getValue("COMM_DIGITAL_SIGNAGE"),
+  Learning_Solutions__c: getValue("COMM_TECH_SOLUTIONS"),
+  AV_IT_Convergence__c: getValue("COMM_AVIT_CONVERGENCE"),
+  UpStream__c: getValue("COMM_BROADCAST_AV"),
+  Regional_Updates__c: getValue("COMM_REGIONAL UPDATES")
+}]
+]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<salesforce:upsert objectType="Contact" doc:name="Upsert Contact" doc:id="86cf3250-fa0a-46e8-b54b-2ad0f4f22fb4" config-ref="Salesforce_Config_JWT" externalIdFieldName="Email" />
+		<ee:transform doc:name="Transform Message" doc:id="5e692624-49f9-4bc3-9b39-65ecd3d223cf" >
+			<ee:message >
+			</ee:message>
+			<ee:variables >
+				<ee:set-variable variableName="isConUpsertSuccessful" ><![CDATA[%dw 2.0
+output application/java
+var isConUpsertSuccessful = payload.successful as String
+---
+isConUpsertSuccessful
+]]></ee:set-variable>
+			</ee:variables>
+		</ee:transform>
+		<choice doc:name="Choice" doc:id="20fa4149-08c5-4989-86c0-034609e615fa">
+    <when expression='#[vars.isConUpsertSuccessful == "true"]'>
+        <logger level="INFO" message="Upsert was successful"/>
+				<set-variable value="#[payload.items[0].id]" doc:name="Set ContactId" doc:id="abde3258-16b3-4529-9a15-547e2df8a491" variableName="contactId" />
+				<salesforce:query doc:name="Query Contact" doc:id="3895437b-3216-41eb-9313-4a8ac7fb9503" config-ref="Salesforce_Config_JWT">
+			<salesforce:salesforce-query><![CDATA[#[ "SELECT Id, AccountId, Account.Name, Is_ANP_Passed__c,Is_CTS_Passed__c FROM Contact WHERE Id = '" ++ (vars.contactId default "") ++ "'" ]
+
+]]></salesforce:salesforce-query>
+		</salesforce:query>
+				<ee:transform doc:name="Transform Message1" doc:id="8344b05e-20f1-49ef-801e-24e780a5d34a">
+			<ee:message />
+			<ee:variables>
+				<ee:set-variable variableName="AccountName"><![CDATA[%dw 2.0
+output application/java
+var AccountName = payload[0].Account.Name
+---
+AccountName]]></ee:set-variable>
+				<ee:set-variable variableName="AccountId"><![CDATA[%dw 2.0
+output application/java
+var AccountId = payload[0].AccountId
+---
+AccountId]]></ee:set-variable>
+				<ee:set-variable variableName="avixaEventId"><![CDATA[%dw 2.0
+output application/java
+var avixaEventId = p('showMetadata.avixaEventId')
+---
+
+avixaEventId]]></ee:set-variable>
+				<ee:set-variable variableName="avixaEventName"><![CDATA[%dw 2.0
+output application/java
+var avixaEventName = p('showMetadata.avixaEventName')
+---
+
+avixaEventName]]></ee:set-variable>
+						<ee:set-variable variableName="isCertified" ><![CDATA[%dw 2.0
+output application/java
+var isCertified = (payload[0].Is_CTS_Passed__c default false) or (payload[0].Is_ANP_Passed__c default false)
+---
+isCertified]]></ee:set-variable>
+			</ee:variables>
+		</ee:transform>
+				<choice doc:name="Choice" doc:id="8c4f9121-8c05-46de-bc95-b3fb4a66e563">
+			<when expression='#[endsWith(vars.accountName, "Person")]'>
+				<logger level="INFO" doc:name="Logger" doc:id="0a8ac598-8d63-4a1e-ba1b-6a61942c9088" message='"IS a Person Account"' />
+				<ee:transform doc:name="Transform Message" doc:id="fe4c79f3-ca3c-4e1d-9280-68974eff152f">
+					<ee:message>
+						<ee:set-payload><![CDATA[%dw 2.0
+output application/java
+---
+[
+  {
+    Id: vars.AccountId,
+    // Only set Name if NOT certified
+    (if (!vars.isCertified) 
+      Name: 
+        (vars.originalPayload.FirstName as String default "") ++ 
+        (if ((vars.originalPayload.FirstName as String default "") != "") " " else "") ++
+        (vars.originalPayload.LastName as String default "") ++ 
+        (if ((vars.originalPayload.LastName as String default "") != "") " " else "") ++ 
+        "Person"
+    else null),
+    BillingStreet: 
+      (vars.originalPayload.AddressLine1 as String default "") ++
+      (if ((vars.originalPayload.AddressLine2 as String default "") != "") ", " ++ (vars.originalPayload.AddressLine2 as String default "") else "") ++
+      (if ((vars.originalPayload.AddressLine3 as String default "") != "") ", " ++ (vars.originalPayload.AddressLine3 as String default "") else ""),
+    BillingCity: vars.originalPayload.City,
+    BillingState: vars.originalPayload.State,
+    BillingPostalCode: vars.originalPayload.ZipOrPostalCode,
+    BillingCountry: vars.originalPayload.CountryName
+  }
+]
+]]></ee:set-payload>
+					</ee:message>
+				</ee:transform>
+						<async doc:name="Async" doc:id="ea5d15ad-e763-45a2-b155-cbd23f782606" >
+							<salesforce:update type="Account" doc:name="Update Account Info" doc:id="83c092b2-14bf-4663-88bf-250dd64354f3" config-ref="Salesforce_Config_JWT" />
+						</async>
+			</when>
+					<otherwise>
+				<logger level="INFO" doc:name="Logger" doc:id="104e9485-0e62-47a7-8ab7-cd866821309e" message='"NOT A person Account"' />
+			</otherwise>
+		</choice>
+				<salesforce:query doc:name="Query If Avixa Event Attendence Exists" doc:id="e0dc46f0-250f-45f4-829f-9501a4c62fed" config-ref="Salesforce_Config_JWT">
+			<salesforce:salesforce-query><![CDATA[#[ "SELECT Id FROM AVIXA_Event_Attendance__c WHERE Registration_ID__c = '" ++ (vars.originalPayload.RegistrationId default "") ++ "' AND Contact__c = '" ++ (vars.contactId default "") ++ "'"]
+]]></salesforce:salesforce-query>
+		</salesforce:query>
+				<choice doc:name="Choice1" doc:id="06bbce8e-3772-4bcd-9dfb-ec95d9a85b69">
+			<when expression="#[sizeOf(payload) == 0]">
+				<logger level="INFO" doc:name="Logger" doc:id="2a532dcb-d596-4ff4-8541-fe80ed126904" message="Creating the Event Attendance"/>
+						<ee:transform doc:name="Transform Message" doc:id="9b0f23fc-b4e0-4d2e-ac2b-8491a1c988f4">
+					<ee:message>
+						<ee:set-payload><![CDATA[%dw 2.0
+output application/java
+---
+[{
+  Registration_ID__c: vars.originalPayload.RegistrationId,
+  Registration_Code__c: vars.originalPayload.RegistrationType,
+  Virtual_AddOn__c: vars.originalPayload.VirtualAddOn,
+  VIP_Code__c: vars.originalPayload.VIPCode,
+  Exhibitor_VIP_Code__c: vars.originalPayload.ExhibitorVIPCode,
+  Verified__c: vars.originalPayload.VerifiedStatus,
+  AVIXA_Events__C: vars.avixaEventId,
+  Name: vars.avixaEventName,
+  Contact__c: vars.contactId,
+  Registration_Date__c: now()
+}]
+]]></ee:set-payload>
+					</ee:message>
+				</ee:transform>
+				<logger level="INFO" doc:name="Logger" doc:id="a3b3f7e3-9449-4c41-bbba-6bacf746deb6" message="#[payload]"/>
+						<salesforce:create type="AVIXA_Event_Attendance__c" doc:name="Create EA" doc:id="274cdada-420b-4c59-9f0a-6073268d63f8" config-ref="Salesforce_Config_JWT" />
+			</when>
+			<otherwise>
+				<logger level="INFO" doc:name="Logger" doc:id="2ada094b-28de-4444-ba75-22043c92d14c" message="Updating the Event Attendance"/>
+						<ee:transform doc:name="Transform Message" doc:id="149587d0-3bec-4b45-837b-eaf7070cf25a">
+					<ee:message>
+						<ee:set-payload><![CDATA[%dw 2.0
+output application/java
+---
+[{
+  Registration_ID__c: vars.originalPayload.RegistrationId,
+  Registration_Code__c: vars.originalPayload.RegistrationType,
+  Virtual_AddOn__c: vars.originalPayload.VirtualAddOn,
+  VIP_Code__c: vars.originalPayload.VIPCode,
+  Exhibitor_VIP_Code__c: vars.originalPayload.ExhibitorVIPCode,
+  Verified__c: vars.originalPayload.VerifiedStatus,
+  Name: vars.avixaEventName,
+  Contact__c: vars.contactId,
+  Id: payload[0].Id
+}]]]></ee:set-payload>
+					</ee:message>
+				</ee:transform>
+				<logger level="INFO" doc:name="Logger1" doc:id="88723826-4c60-4a9b-865e-9ab7c60e74b7" message="#[payload]"/>
+						<salesforce:update type="AVIXA_Event_Attendance__c" doc:name="Update EA" doc:id="816a015b-d9ff-498d-87c1-0b68673ce97b" config-ref="Salesforce_Config_JWT" />
+			</otherwise>
+		</choice>
+				<ee:transform doc:name="Transform Message" doc:id="2ddd1151-c304-42af-a9d0-67fa00c63cb0">
+					<ee:message>
+					</ee:message>
+					<ee:variables >
+						<ee:set-variable variableName="isEventAttendanceSuccessful" ><![CDATA[%dw 2.0
+output application/java
+var isEventAttendanceSuccessful = payload.successful as String
+---
+isEventAttendanceSuccessful]]></ee:set-variable>
+						<ee:set-variable variableName="avixaAttendanceId" ><![CDATA[%dw 2.0
+output application/java 
+var avixaAttendanceId = payload.items[0].id
+---
+avixaAttendanceId]]></ee:set-variable>
+					</ee:variables>
+				</ee:transform>
+				<choice doc:name="Choice" doc:id="e12a6c67-fc6f-4827-9a9d-1314b7c85544">
+					<when expression='#[vars.isEventAttendanceSuccessful == "true"]'>
+						<salesforce:query doc:name="Query If show Demographics Exits" doc:id="323ee6df-0740-4c07-a795-b5521a2558bd" config-ref="Salesforce_Config_JWT">
+			<salesforce:salesforce-query><![CDATA[#["SELECT Id FROM Show_Demographics__c WHERE Attendee__c = '" ++ (vars.contactId default "") ++ "' AND AVIXA_Event_Attendance__c = '" ++ (vars.avixaAttendanceId default "") ++ "'"]
+]]></salesforce:salesforce-query>
+		</salesforce:query>
+						<choice doc:name="Choice2" doc:id="76266386-6ae3-4798-9101-c291ff777abb">
+			<when expression="#[sizeOf(payload) == 0]">
+				<logger level="INFO" doc:name="Logger" doc:id="392ff3db-e435-462d-9e21-1054cffa1698" message="Show Demographics Not Found" />
+				<ee:transform doc:name="Transform Message" doc:id="1a167596-a4dc-4859-b27f-1cf2ad9c36a1">
+					<ee:message>
+						<ee:set-payload><![CDATA[%dw 2.0
+output application/java
+---
+[{
+  Name: vars.avixaEventName,
+  Attendee__c: vars.contactId,
+  Primary_Business__c: vars.originalPayload.Demographics.PrimaryBusiness,
+  Primary_Business_Other__c: vars.originalPayload.Demographics.PrimaryBusinessOther,
+  Service_Market__c: vars.originalPayload.Demographics.ServiceMarkets,
+  Service_Market_Other__c: vars.originalPayload.Demographics.ServiceMarketsOther,
+  Solutions__c: vars.originalPayload.Demographics.Solutions,
+  Total_Employees__c: vars.originalPayload.Demographics.TotalEmployees,
+  Current_Position__c: vars.originalPayload.Demographics.CurrentPosition,
+  Current_Position_Other__c: vars.originalPayload.Demographics.CurrentPositionOther,
+  Birth_Year__c: vars.originalPayload.Demographics.BirthYear,
+  Products__c: vars.originalPayload.Demographics.Products,
+  Products_Other__c: vars.originalPayload.Demographics.ProductsOther,
+  Purchase_Authority__c: vars.originalPayload.Demographics.PurchasingAuthority,
+  News_Organization__c: vars.originalPayload.Demographics.NewsOrganization,
+  News_Organization_Website__c: vars.originalPayload.Demographics.NewsOrganizationWebsite,
+  Media_Type__c: vars.originalPayload.Demographics.MediaType,
+  Budget__c: vars.originalPayload.Demographics.Budget,
+  Gender__c: vars.originalPayload.Demographics.Gender,
+  AVIXA_Event_Attendance__c: vars.avixaAttendanceId
+}]]]></ee:set-payload>
+					</ee:message>
+				</ee:transform>
+				<logger level="INFO" doc:name="Logger1" doc:id="e70f6be3-bd08-4f86-8c1a-f30f8f54d927" message="#[payload]" />
+				<salesforce:create type="Show_Demographics__c" doc:name="Create Show Demogrpahics" doc:id="b0bb5f5f-a406-40e4-ad7e-5e59df6a7ee3" config-ref="Salesforce_Config_JWT" />
+			</when>
+			<otherwise>
+				<logger level="INFO" doc:name="Logger" doc:id="04904e1e-14bc-4380-a7a8-d6d52ed79d48" message="Show Demographics Found" />
+				<ee:transform doc:name="Transform Message" doc:id="0843772c-bba9-419c-b021-1699f704f182">
+					<ee:message>
+						<ee:set-payload><![CDATA[%dw 2.0
+output application/java
+---
+[{
+  Name: vars.avixaEventName,
+  Attendee__c: vars.contactId,
+  Primary_Business__c: vars.originalPayload.Demographics.PrimaryBusiness,
+  Primary_Business_Other__c: vars.originalPayload.Demographics.PrimaryBusinessOther,
+  Service_Market__c: vars.originalPayload.Demographics.ServiceMarkets,
+  Service_Market_Other__c: vars.originalPayload.Demographics.ServiceMarketsOther,
+  Solutions__c: vars.originalPayload.Demographics.Solutions,
+  Total_Employees__c: vars.originalPayload.Demographics.TotalEmployees,
+  Current_Position__c: vars.originalPayload.Demographics.CurrentPosition,
+  Current_Position_Other__c: vars.originalPayload.Demographics.CurrentPositionOther,
+  Birth_Year__c: vars.originalPayload.Demographics.BirthYear,
+  Products__c: vars.originalPayload.Demographics.Products,
+  Products_Other__c: vars.originalPayload.Demographics.ProductsOther,
+  Purchase_Authority__c: vars.originalPayload.Demographics.PurchasingAuthority,
+  News_Organization__c: vars.originalPayload.Demographics.NewsOrganization,
+  News_Organization_Website__c: vars.originalPayload.Demographics.NewsOrganizationWebsite,
+  Media_Type__c: vars.originalPayload.Demographics.MediaType,
+  Budget__c: vars.originalPayload.Demographics.Budget,
+  Gender__c: vars.originalPayload.Demographics.Gender,
+  AVIXA_Event_Attendance__c: vars.avixaAttendanceId,
+  Id: payload[0].Id
+}]
+]]></ee:set-payload>
+					</ee:message>
+				</ee:transform>
+				<logger level="INFO" doc:name="Logger1" doc:id="71c6e1ea-070d-4ed0-ae4f-6b15607f9290" message="#[payload]" />
+				<salesforce:update type="Show_Demographics__c" doc:name="Update Show Demographics" doc:id="b5d69e29-02b9-4c85-944f-d2a2d47b4514" config-ref="Salesforce_Config_JWT" />
+			</otherwise>
+		</choice>
+						<ee:transform doc:name="Transform Message" doc:id="95dab7a1-d8d5-41f2-9939-3f94fa46335e">
+					<ee:message>
+					</ee:message>
+					<ee:variables>
+						<ee:set-variable variableName="isShowDemographicsSuccessfull"><![CDATA[%dw 2.0
+output application/java
+var isShowDemographicsSuccessfull = payload.successful as String
+---
+isShowDemographicsSuccessfull]]></ee:set-variable>
+						<ee:set-variable variableName="showDemoId"><![CDATA[%dw 2.0
+output application/java
+var showDemoId = payload.items[0].id
+---
+showDemoId]]></ee:set-variable>
+					</ee:variables>
+				</ee:transform>
+						<choice doc:name="Choice" doc:id="ae5d92ea-fb53-49f8-8623-bd45e20f3300">
+					<when expression='#[vars.isShowDemographicsSuccessfull == "true"]'>
+						<choice doc:name="Choice3" doc:id="b1b82e1e-8d75-4c08-a15f-0ef8729cd8b7">
+			<when expression="#[vars.showDemoId != null and vars.avixaAttendanceId != null]">
+				<logger level="INFO" doc:name="Logger" doc:id="bf366d53-ed74-4b84-86bf-e69875b2587c" message="Updating Show Demographics in Avixa Event Attendance" />
+				<ee:transform doc:name="Transform Message" doc:id="b94e820e-bbee-44ee-b7e7-536f91969256">
+					<ee:message>
+						<ee:set-payload><![CDATA[%dw 2.0
+output application/java
+---
+[
+  {
+    ID: vars.avixaAttendanceId,
+    Show_Demographics__c: vars.showDemoId
+  }
+]
+]]></ee:set-payload>
+					</ee:message>
+				</ee:transform>
+						<async doc:name="Async" doc:id="c8b26416-6510-40cc-8419-c68e82be6411">
+							<salesforce:update type="AVIXA_Event_Attendance__c" doc:name="Update Avixa Event Attendance" doc:id="26c258e4-bfcb-49f1-8dd3-d9d8010fd267" config-ref="Salesforce_Config_JWT" />
+						</async>
+			</when>
+		</choice>
+						<ee:transform doc:name="Transform Message2" doc:id="cf00b8ed-859d-426f-bfd0-48478d6d966a">
+			<ee:message>
+				<ee:set-payload><![CDATA[%dw 2.0
+output application/json
+---
+{
+  "statuscode": 200,
+  "status": "OK",
+  "data": {
+    "contact": vars.contactId,
+    "showDemographics": vars.showDemoId,
+    "avixaEventAttendance": vars.avixaAttendanceId
+  },
+  "message": "Contact was created/updated successfully. Demographics has been updated successfully.",
+  "errors": []
+}
+
+]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+					</when>
+					<otherwise>
+						<set-variable value="500" doc:name="Set Http Error Status" doc:id="65a02778-6ece-4fa6-8b5a-dede85d4c00e" variableName="httpStatus" />
+								<ee:transform doc:name="Transform Message" doc:id="7a157f67-112c-4661-84b4-8f2ad2c16314">
+							<ee:message>
+								<ee:set-payload><![CDATA[%dw 2.0
+output application/json
+---
+[
+  {
+    statuscode: 500,
+    status: "Internal Server Error",
+    data: vars.originalPayload,
+    message: null,
+    errors: 
+      if (!isEmpty(payload.items) and !isEmpty(payload.items[0].payload.errors))
+        payload.items[0].payload.errors map ((err) -> err.message)
+      else
+        ["Unknown error occurred"]
+  }
+]
+]]></ee:set-payload>
+							</ee:message>
+						</ee:transform>
+					</otherwise>
+				</choice>
+					</when>
+					<otherwise >
+						<set-variable value="500" doc:name="Set Http Error Status" doc:id="57f8d1e8-92fb-42b0-8c0d-6af9eced8111" variableName="httpStatus" />
+						<ee:transform doc:name="Transform Message" doc:id="9c5e2ee5-fb19-442d-84a7-0b28ebdd2cb9" >
+							<ee:message >
+								<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+[
+  {
+    statuscode: 500,
+    status: "Internal Server Error",
+    data: vars.originalPayload,
+    message: null,
+    errors: 
+      if (!isEmpty(payload.items) and !isEmpty(payload.items[0].payload.errors))
+        payload.items[0].payload.errors map ((err) -> err.message)
+      else
+        ["Unknown error occurred"]
+  }
+]]]></ee:set-payload>
+							</ee:message>
+						</ee:transform>
+					</otherwise>
+				</choice>
+    </when>
+			<otherwise>
+        <logger level="INFO" message="Upsert failed"/>
+				<set-variable value="500" doc:name="Set Http Error Status" doc:id="878393c4-dc0c-4754-a3e4-93f24a97bdeb" variableName="httpStatus"/>
+				<ee:transform doc:name="Transform Message" doc:id="eb125c2f-80e9-46d1-8414-360d9d2f0f3b">
+					<ee:message>
+						<ee:set-payload><![CDATA[%dw 2.0
+output application/json
+---
+[
+  {
+    statuscode: 500,
+    status: "Internal Server Error",
+    data: vars.originalPayload,
+    message: null,
+    errors: 
+      if (!isEmpty(payload.items) and !isEmpty(payload.items[0].payload.errors))
+        payload.items[0].payload.errors map ((err) -> err.message)
+      else
+        ["Unknown error occurred"]
+  }
+]
+]]></ee:set-payload>
+					</ee:message>
+				</ee:transform>
+    </otherwise>
+</choice>
+		<set-variable value="#[payload]" doc:name="Set Response Payload" doc:id="f378adfe-9369-4e91-a697-70eb7860b4dd" variableName="responsePayload" />
+		<async doc:name="Async" doc:id="8ad88434-10e9-49bc-aec7-34b469c5d994" >
+			<flow-ref doc:name="Flow Reference" doc:id="ec054c61-349f-49a3-adbd-7837bfa39f7a" name="ical-registrationSub_Flow_Create_Azure_Table_Logs" />
+		</async>
+    </flow>
+	<sub-flow name="ical-registrationSub_Flow_Create_Azure_Table_Logs" doc:id="f16c0f9f-4a0e-4558-be8e-b2e1c8c213c9" >
+		<ee:transform doc:name="Transform Message" doc:id="22c394cf-96f9-4da9-9683-174d48a459c4" >
+			<ee:message >
+			</ee:message>
+			<ee:variables >
+				<ee:set-variable variableName="storageAccount" ><![CDATA[%dw 2.0
+output application/java
+var storageAccount = p('azure.storageAccount')
+---
+
+storageAccount]]></ee:set-variable>
+				<ee:set-variable variableName="tableName" ><![CDATA[%dw 2.0
+output application/java
+var tableName = p('azure.tableName')
+---
+
+tableName]]></ee:set-variable>
+				<ee:set-variable variableName="xMsDate" ><![CDATA[%dw 2.0
+output application/java
+
+var xMsDate = 
+  now() as String { format: "EEE, dd MMM yyyy HH:mm:ss", locale: "en-US" } ++ " GMT"
+
+---
+xMsDate
+]]></ee:set-variable>
+				<ee:set-variable variableName="sasToken" ><![CDATA[%dw 2.0
+output application/java
+var sasToken = p('azure.sasToken')
+---
+
+sasToken]]></ee:set-variable>
+			</ee:variables>
+		</ee:transform>
+		<ee:transform doc:name="Transform Message" doc:id="c783d3d8-652d-47e3-a08f-be0a469b4954">
+			<ee:message>
+				<ee:set-payload><![CDATA[%dw 2.0
+output application/json
+---
+{
+  PartitionKey: now() as String { format: "yyyyMMdd" },
+  RowKey: (now() as String { format: "HHmmssSSS" }) ++ "-" ++ (floor(random() * 10000) as String),
+  Email: vars.originalPayload.EmailAddress,
+  RequestPayload: write(vars.originalPayload, "application/json"),
+  ResponsePayload: write(vars.responsePayload, "application/json")
+}
+
+]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<http:request method="POST" doc:name="Request" doc:id="e9d57c2b-6022-4e14-9ead-1e30e5dae6c6" url="#['https://' ++ vars.storageAccount ++ '.table.core.windows.net/' ++ vars.tableName ++ '?' ++ vars.sasToken]">
+			<http:headers ><![CDATA[#[%dw 2.0
+output application/java
+---
+{
+  "x-ms-date": vars.xMsDate,
+  "x-ms-version": "2019-02-02",
+  "Accept": "application/json;odata=nometadata",
+  "Content-Type": "application/json"
+}]]]></http:headers>
+		</http:request>
+		<logger level="INFO" doc:name="Log Azure Respone Status" doc:id="3af1d123-0f13-4785-aac3-f1c43d870b24" message="Azure Response Status: #[attributes.statusCode] - Body: #[payload]"/>
+		<choice doc:name="Is 500 Status Code Sent" doc:id="1805e099-db43-4b94-bb4d-4c7024251f66" >
+			<when expression="#[(vars.responsePayload[0].statuscode as Number) == 500]">
+
+
+			
+				<email:send doc:name="Send Email"
+            config-ref="Email_SMTP"
+            fromAddress="#[p('email.fromAddress')]"
+            subject="#[p('email.subject')]"
+            toAddresses="#[p('email.toAddress') splitBy ',']">
+
+<email:body contentType="text/html">
+  <email:content><![CDATA[#[%dw 2.0
+output text/plain
+var respRaw =
+  if (vars.responsePayload is String)
+    read(vars.responsePayload, "application/json")
+  else
+    (vars.responsePayload default [])
+var first =
+  if (respRaw is Array and sizeOf(respRaw) > 0) respRaw[0] else respRaw
+var emailVal = vars.originalPayload.EmailAddress default "N/A"
+var errors =
+  if (first is Object and (first.errors default null) != null)
+    (first.errors map (e) -> (e as String))
+  else
+    []
+---
+"<h3>Error in the ICAL Registration APP</h3>" ++
+"<b>Email:</b> " ++ emailVal ++ "<br/>" ++
+(if ((first.statuscode default null) != null)
+  "<b>Status Code:</b> " ++ (first.statuscode as String) ++ "<br/>"
+ else "") ++
+(if ((first.status default null) != null)
+  "<b>Status:</b> " ++ (first.status as String) ++ "<br/>"
+ else "") ++
+(if (!isEmpty(errors))
+  "<b>Errors:</b><ul><li>" ++ (errors joinBy "</li><li>") ++ "</li></ul>"
+ else
+  "<b>Errors:</b> None<br/>"
+) ++
+"<b>Response payload:</b><pre>" ++ write(respRaw, "application/json", { indent: 2 }) ++ "</pre>"
+] ]]></email:content>
+</email:body>
+
+
+
+
+
+</email:send>
+
+			</when>
+		</choice>
+	</sub-flow>
+</mule>
