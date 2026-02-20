@@ -1,0 +1,107 @@
+public with sharing class GenericCustomMetadataUpdater {
+
+    public static Boolean update(Map<String, Map<String, Object>> recordsByType) {
+        try {
+            MetadataService.MetadataPort service = createService();
+
+            List<MetadataService.Metadata> metadataToUpsert = new List<MetadataService.Metadata>();
+
+            for (String typeApi : recordsByType.keySet()) {
+                Map<String, Object> records = recordsByType.get(typeApi);
+
+                for (String recordName : records.keySet()) {
+                    Map<String, Object> fieldValues = (Map<String, Object>) records.get(recordName);
+
+                    metadataToUpsert.add(
+                        buildCustomMetadata(typeApi, recordName, fieldValues)
+                    );
+                }
+            }
+
+            MetadataService.UpsertResult[] results =
+                service.upsertMetadata(metadataToUpsert);
+
+            for (MetadataService.UpsertResult r : results) {
+                if (!r.success) {
+                    log('ERROR', r.errors != null && r.errors.size() > 0
+                        ? r.errors[0].message
+                        : 'Unknown metadata error');
+                    return false;
+                }
+            }
+
+            log('SUCCESS', 'Custom metadata upsert completed');
+            return true;
+
+        } catch (Exception e) {
+            log('EXCEPTION', e.getMessage());
+            return false;
+        }
+    }
+
+    /* ===============================
+       Metadata Builders
+       =============================== */
+
+    private static MetadataService.CustomMetadata buildCustomMetadata(
+        String typeApi,
+        String recordName,
+        Map<String, Object> fieldValues
+    ) {
+        MetadataService.CustomMetadata cmd = new MetadataService.CustomMetadata();
+
+        cmd.fullName = typeApi + '.' + recordName;
+        cmd.label = recordName;
+
+        List<MetadataService.CustomMetadataValue> values =
+            new List<MetadataService.CustomMetadataValue>();
+
+        for (String fieldApi : fieldValues.keySet()) {
+            values.add(createValue(fieldApi, fieldValues.get(fieldApi)));
+        }
+
+        cmd.values = values;
+        return cmd;
+    }
+
+    private static MetadataService.CustomMetadataValue createValue(
+        String fieldApi,
+        Object value
+    ) {
+        MetadataService.CustomMetadataValue v =
+            new MetadataService.CustomMetadataValue();
+        v.field = fieldApi;
+        v.value = value;
+        return v;
+    }
+
+    /* ===============================
+       Metadata API Service
+       =============================== */
+
+    private static MetadataService.MetadataPort createService() {
+        MetadataService.MetadataPort service =
+            new MetadataService.MetadataPort();
+
+        service.SessionHeader =
+            new MetadataService.SessionHeader_element();
+
+        service.SessionHeader.sessionId =
+            UserInfo.getSessionId();
+
+        return service;
+    }
+
+    /* ===============================
+       Logging Hook (Override as needed)
+       =============================== */
+
+    private static void log(String level, String message) {
+        System.debug(level + ' : ' + message);
+
+        // Optional: insert custom log object here
+        // Example:
+        // My_Log__c l = new My_Log__c(Level__c=level, Message__c=message);
+        // insert l;
+    }
+}
